@@ -1,54 +1,52 @@
-
 import streamlit as st
-import pickle
+import pandas as pd
 import numpy as np
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
 
-# ========================================
-# Load model
-# ========================================
-model = pickle.load(open('model.pkl', 'rb'))
+# Load dataset
+df = pd.read_csv("onlinefoods.csv")
 
-# ========================================
-# Judul Halaman
-# ========================================
-st.title("🎯 Prediksi Penggunaan Layanan Makanan Online")
-st.write("Aplikasi ini dibuat oleh **Willia Diva Ikhsani** untuk UAS MPML 2025.")
+# Preprocessing
+if 'Unnamed: 12' in df.columns:
+    df = df.drop(columns=['Unnamed: 12'])
 
-# ========================================
-# Input fitur
-# (Harus sesuai urutan saat training model)
-# ========================================
+le = LabelEncoder()
+df['Output'] = le.fit_transform(df['Output'])
 
-age = st.number_input("Usia", min_value=10, max_value=100, step=1)
-gender = st.selectbox("Jenis Kelamin", ["Perempuan", "Laki-laki"])
-marital_status = st.selectbox("Status Pernikahan", ["Belum Menikah", "Menikah"])
-occupation = st.selectbox("Pekerjaan", ["Pelajar", "Mahasiswa", "Pegawai", "Wirausaha", "Lainnya"])
-monthly_income = st.number_input("Penghasilan Bulanan (dalam ribu)", min_value=0)
-education = st.selectbox("Pendidikan", ["SMA", "Diploma", "Sarjana", "Pascasarjana"])
-family_size = st.slider("Jumlah anggota keluarga", 1, 10)
-latitude = st.number_input("Latitude", format="%.6f")
-longitude = st.number_input("Longitude", format="%.6f")
-pin_code = st.number_input("Kode Pos", step=1)
-feedback = st.slider("Feedback (0-10)", 0, 10)
+X = df.drop('Output', axis=1)
+y = df['Output']
 
-# ========================================
-# Encoding Manual (pastikan sesuai training)
-# ========================================
-gender_val = 0 if gender == "Perempuan" else 1
-marital_val = 0 if marital_status == "Belum Menikah" else 1
-occupation_val = {"Pelajar": 0, "Mahasiswa": 1, "Pegawai": 2, "Wirausaha": 3, "Lainnya": 4}[occupation]
-education_val = {"SMA": 0, "Diploma": 1, "Sarjana": 2, "Pascasarjana": 3}[education]
+categorical_cols = X.select_dtypes(include='object').columns
+for col in categorical_cols:
+    X[col] = le.fit_transform(X[col])
 
-# ========================================
-# Gabungkan input ke array
-# ========================================
-input_data = np.array([[age, gender_val, marital_val, occupation_val, monthly_income,
-                        education_val, family_size, latitude, longitude, pin_code, feedback]])
+numeric_cols = X.select_dtypes(include='number').columns
+scaler = StandardScaler()
+X[numeric_cols] = scaler.fit_transform(X[numeric_cols])
 
-# ========================================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# Latih model
+model = KNeighborsClassifier(n_neighbors=5)
+model.fit(X_train, y_train)
+
+# Streamlit UI
+st.title("Prediksi Output Online Food Order")
+
+# Buat input form dinamis berdasarkan kolom
+user_input = {}
+for col in X.columns:
+    user_input[col] = st.number_input(f"Input {col}", step=1.0)
+
 # Prediksi
-# ========================================
-if st.button("🔮 Prediksi"):
-    prediction = model.predict(input_data)[0]
-    result_text = "✅ Akan Memesan Online Food" if prediction == 1 else "❌ Tidak Akan Memesan"
-    st.success(f"Hasil Prediksi: {result_text}")
+if st.button("Prediksi"):
+    input_df = pd.DataFrame([user_input])
+    input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
+    prediction = model.predict(input_df)
+    label = le.inverse_transform(prediction)[0]
+    st.success(f"Prediksi Output: {label}")
+
